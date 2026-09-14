@@ -3,6 +3,105 @@
 Manual auction operator for the **Celestian Fall Tournament** — 6 owners, 100k
 credits each, 30 players across 5 tiers.
 
+## First time here? Start with this
+
+You need two free tools: **Git** (to download the code) and **Node.js** (to run
+the backend). If you already have both, skip to [Running it](#running-it).
+
+### 1. Install Git
+
+<details>
+<summary><b>Windows</b></summary>
+
+Open PowerShell and run:
+
+```powershell
+winget install --id Git.Git
+```
+
+Or download the installer from <https://git-scm.com/download/win> and click
+through it — every default option is fine.
+
+**Close and reopen your terminal afterwards**, otherwise it will not find the
+new `git` command yet.
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
+
+```bash
+xcode-select --install
+```
+
+That installs Git along with Apple's command line tools. If you use Homebrew,
+`brew install git` works too.
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+```bash
+sudo apt install git          # Debian / Ubuntu
+sudo dnf install git          # Fedora
+```
+</details>
+
+Check it worked — this should print a version number, not an error:
+
+```bash
+git --version
+```
+
+Then tell Git who you are (it stamps this on your commits, one time only):
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+### 2. Install Node.js
+
+Download the **LTS** version from <https://nodejs.org> and install it, or on
+Windows:
+
+```powershell
+winget install --id OpenJS.NodeJS.LTS
+```
+
+Reopen your terminal, then check:
+
+```bash
+node --version
+```
+
+Anything 18 or newer works.
+
+### 3. Get the code
+
+```bash
+git clone https://github.com/sher1203/valorant-fall-tournament.git
+cd valorant-fall-tournament
+git checkout backend-including-spec-view
+```
+
+`git clone` downloads the project into a new folder in whatever directory you
+are currently in. To come back to it in a future session, just `cd` into that
+folder — you only clone once.
+
+**That third line matters.** A fresh clone puts you on the `main` branch, which
+only has the original single-file version — no `server.js`, so `node server.js`
+would fail with *"Cannot find module"*. `backend-including-spec-view` is the
+branch with the backend on it. Run `git branch --show-current` any time you want
+to check where you are, and see [Branches](#branches) for what each one holds.
+
+To pull down later changes:
+
+```bash
+git pull
+```
+
+There are no packages to install — the backend uses only what ships with Node.
+
 ## Running it
 
 ```bash
