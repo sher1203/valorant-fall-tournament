@@ -156,6 +156,56 @@ Safe to run while the server is up — the server notices the file changed on di
 and reloads before its next write. Refresh the browser afterwards to clear the
 banner.
 
+## Driving the auction
+
+Nothing sells automatically. You are the auctioneer: the screen tracks the
+money and the rules, you decide when the hammer falls.
+
+Per owner card:
+
+| Control | What it does |
+|---|---|
+| **Bid** | Raises to the next legal amount — current bid plus the tier's increment |
+| **Max** | Bids the most that owner can legally commit to this player, in one click |
+| **Pass** | Drops them out of this player's bidding |
+| **Jump** + box | Bids a specific amount, typed in thousands (`76` = 76,000) |
+
+Across the top:
+
+| Control | What it does |
+|---|---|
+| **Sell to Leader** | Awards the player at the current bid. Enabled only once someone leads |
+| **Mark Unsold** | Returns the player to the pool for a later pass |
+| **Assign to Remaining Owner** | Appears only when one eligible owner is left for a Tier 1 player; hands them the player at floor price |
+| **Undo Last Action** | Steps back one action, in the browser *and* the database |
+| **Fresh Reset** | Restarts the on-screen auction. Leaves the database alone |
+
+### The Max button
+
+**Max** bids the owner's *spendable* figure — their credits minus the reserve —
+snapped down onto the tier's increment grid so it is always a legal amount. It
+disables when even the next increment is out of reach, which is also what
+happens to everyone else once someone has bid their true max: that bid cannot be
+beaten, and the buttons say so.
+
+It never touches the reserve, so a max bid can never cost an owner a later tier.
+
+### Hidden budgets
+
+Budgets are withheld from the screen so owners cannot count each other's money
+mid-auction. That covers the owner-card figures, the Team Board's budget column
+and the auction cap — *Live Max* and *Auction Cap* go too, because both are
+computed from the budget and would give it straight back.
+
+The rules still run on the real numbers; only the display changes. To put them
+back, set the flag near the top of the script in `index.html`:
+
+```js
+const SHOW_BUDGETS = true;
+```
+
+The backend log is unaffected — the terminal always shows the full ledger.
+
 ## Auction rules encoded
 
 - Every owner must end with **exactly one player per tier**, so owning a tier
@@ -208,8 +258,33 @@ Console output is one line per action, plus a full budget table after every sale
 Rejected events leave no trace, so an undo always targets the last real change.
 There is no API route that wipes the database; only `clear-db.js` does that.
 
+## Troubleshooting
+
+**`Cannot find module ... server.js`** — you are on the `main` branch, which has
+no backend. `git checkout backend-including-spec-view`.
+
+**`EADDRINUSE: address already in use :::3000`** — a server is already running.
+Close that terminal, or start this one on another port: `PORT=3001 node server.js`
+(PowerShell: `$env:PORT=3001; node server.js`).
+
+**The page loads but nothing appears in the terminal** — you opened `index.html`
+off disk instead of through the server. Use <http://localhost:3000>.
+
+**The red banner will not go away** — the database still has data. Run
+`node clear-db.js`, then refresh the page.
+
+**The backend rejected a sale** — the terminal prints the reason: the player is
+already sold, the owner already holds that tier, or they cannot afford the
+price. Usually it means the browser and database have drifted apart; clearing
+the database and restarting both is the quickest fix.
+
 ## Branches
 
-- `main` — original single-file operator
-- `frontend/hide-budgets` — budgets withheld from the UI, plus the **Max** bid button
-- `backend/auction-ledger` — the above, plus the backend and JSON database
+| Branch | Contents |
+|---|---|
+| `main` | Original single-file operator — the rollback point |
+| `frontend/hide-budgets` | Budgets withheld from the UI, plus the **Max** bid button |
+| `backend/auction-ledger` | The above, plus the backend and JSON database |
+| `backend-including-spec-view` | Current work — everything above, plus database persistence, `clear-db.js` and the not-fresh warnings |
+
+Check where you are with `git branch --show-current`.
