@@ -108,6 +108,19 @@ function isFresh() {
  */
 function stashSession(ev) {
   if (!ev || !ev.state) return;
+
+  // A browser that never managed to resume builds a blank auction, and its first
+  // action would otherwise save that over a real draft. The saved session may
+  // never know about FEWER sales than the ledger has already recorded, so a
+  // regression like that is refused outright - the event still counts, but the
+  // resume point is left alone.
+  const incoming = (ev.state.soldOrder || []).length;
+  if (incoming < db.sales.length) {
+    logLine('warn', 'refused to overwrite the saved session: browser reports ' +
+      incoming + ' sales, ledger has ' + db.sales.length + ' - out of sync');
+    return;
+  }
+
   db.session = { savedAt: new Date().toISOString(), state: ev.state };
 }
 
@@ -180,6 +193,28 @@ function printLedger(headline) {
   console.log('         ' + rule);
   console.log('         ' + C.dim(db.sales.length + '/' + db.players.length +
     ' players sold - ' + fmt(totalSpent) + ' committed across the league') + '\n');
+}
+
+/**
+ * Wipe and reseed, backing the old database up first. clear-db.js does the same
+ * thing from a terminal; this is what the UI's Reset Auction button calls.
+ */
+function clearDatabase(reason) {
+  let backup = null;
+  if (db.sales.length || db.events.length || db.session) {
+    const dir = path.join(ROOT, 'backups');
+    fs.mkdirSync(dir, { recursive: true });
+    backup = 'db-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    fs.writeFileSync(path.join(dir, backup), JSON.stringify(db, null, 2) + '\n');
+  }
+  const had = db.sales.length;
+  db = loadSeed();
+  undoStack = [];
+  saveDb(db);
+  logLine('reset', 'database cleared via ' + reason + ' - ' + had +
+    ' sales discarded' + (backup ? ', backed up to backups/' + backup : ''));
+  printLedger('BUDGETS AFTER RESET');
+  return { ok: true, cleared: true, discarded: had, backup };
 }
 
 // ------------------------------------------------------------ event handling
@@ -422,8 +457,15 @@ const server = http.createServer(async (req, res) => {
     return send(res, result.ok ? 200 : 409, result);
   }
 
+  // Reset Auction in the UI. Unlike Fresh Reset this really does wipe the
+  // database - the browser confirms first, and a backup is written either way.
+  if (route === '/api/clear' && req.method === 'POST') {
+    reloadIfChangedOnDisk();
+    return send(res, 200, clearDatabase('the Reset Auction button'));
+  }
+
   // Kept for the UI's Fresh Reset: it restarts the on-screen auction but does
-  // NOT clear the database - `node clear-db.js` is the only thing that does.
+  // NOT clear the database.
   if (route === '/api/reset' && req.method === 'POST') {
     return send(res, 200, handleEvent({ type: 'reset' }));
   }

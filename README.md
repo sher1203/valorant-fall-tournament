@@ -140,6 +140,17 @@ the latest copy in `db.json`. That matters because the queue is shuffled in the
 browser and exists nowhere else — without it, a reload could not put the draft
 back in the same order.
 
+When the database has something in it, the banner carries two buttons:
+
+| Button | What it does |
+|---|---|
+| **Resume Auction** | Loads the saved draft onto this page. Shown when auto-resume did not happen — usually because you had already started working offline |
+| **Reset Auction** | Wipes the database and starts clean. Confirms first, and writes a backup to `backups/` |
+
+**Reset Auction** is the same wipe as `node clear-db.js`, just without leaving the
+browser. **Resume Auction** is withheld when the saved session disagrees with the
+ledger, because loading it would only cause rejected sales.
+
 Two things do **not** survive a reload:
 
 - **Undo history.** Those snapshots belonged to the old page, so Undo starts
@@ -273,10 +284,18 @@ Console output is one line per action, plus a full budget table after every sale
 | `GET /api/log?limit=n` | The recorded event log |
 | `POST /api/event` | Record an action — `auction_start`, `player_up`, `bid`, `pass`, `sold`, `assigned`, `unsold`, `auction_complete`, `undo`, `reset` |
 | `POST /api/reset` | Restart the on-screen auction — **does not clear the database** |
+| `POST /api/clear` | Wipe and reseed the database — what **Reset Auction** calls |
 
 `undo` rolls the database back one action, matching the UI's Undo button.
 Rejected events leave no trace, so an undo always targets the last real change.
-There is no API route that wipes the database; only `clear-db.js` does that.
+
+A saved session may never report **fewer** sales than the ledger already holds;
+such a write is refused. That is what stops a browser which never managed to
+resume — because it was opened before the server was up — from saving its blank
+auction over a real draft on the first click. The browser also withholds its
+state entirely until it has successfully read the backend at least once, and
+retries every 3 seconds while the backend is unreachable, so it reconnects on its
+own with nothing lost and no refresh needed.
 
 ## Troubleshooting
 
@@ -300,6 +319,12 @@ record, so the next reload resumes from the reset state.
 
 **Undo is greyed out after a refresh** — expected. Undo history lives in the
 page, not the database, so it does not survive a reload.
+
+**"Backend unreachable - nothing is being recorded"** — the server is not
+running, or was still starting when the page loaded. Start it with
+`node server.js`; the page reconnects by itself within a few seconds. Nothing is
+saved while that banner is up, which is deliberate: it is what keeps a blank page
+from overwriting a real auction.
 
 **The backend rejected a sale** — the terminal prints the reason: the player is
 already sold, the owner already holds that tier, or they cannot afford the
