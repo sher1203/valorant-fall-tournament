@@ -68,6 +68,9 @@
   .btn-sell:hover:not(:disabled){background:var(--sell-hover);border-color:var(--sell-hover);}
   .btn-operator{background:var(--op);border-color:var(--op);color:var(--op-ink);font-weight:600;}
   .btn-operator:hover:not(:disabled){background:var(--op-hover);border-color:var(--op-hover);}
+  .btn-max{background:transparent;border-color:var(--accent-strong);color:#93c5fd;font-weight:700;}
+  .btn-max:hover:not(:disabled){background:rgba(59,130,246,.14);border-color:var(--accent);
+    color:var(--accent-ink);}
   .btn-pass{background:transparent;border-color:var(--line);color:var(--sub);}
   .btn-pass:hover:not(:disabled){color:var(--text);border-color:var(--sub-dim);background:var(--panel2);}
   .controls-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;}
@@ -292,6 +295,18 @@ function nextLegalBid(tier){
   return state.currentBid + INCR[tier];
 }
 
+// Highest bid this owner can legally make: their live max, snapped DOWN onto the
+// tier's increment grid (floor + n*incr). Returns null when even the next legal
+// bid is out of reach. Never touches the reserve that protects unfilled tiers.
+function maxLegalBid(ownerName, tier){
+  const max = liveMaxBid(ownerName, tier);
+  if(!Number.isFinite(max)) return null;
+  const steps = Math.floor((max - FLOOR[tier]) / INCR[tier]);
+  if(steps < 0) return null;
+  const amt = FLOOR[tier] + steps * INCR[tier];
+  return amt >= nextLegalBid(tier) ? amt : null;
+}
+
 function isValidJumpAmount(tier, amount){
   if(!Number.isFinite(amount)) return false;
   if(amount < nextLegalBid(tier)) return false;
@@ -376,6 +391,13 @@ function placeJumpBidRaw(ownerName, amount){
   render();
 }
 
+function placeMaxBid(ownerName){
+  if(!state.current) return;
+  const amt = maxLegalBid(ownerName, state.current.tier);
+  if(amt === null) return;
+  placeJumpBidRaw(ownerName, amt);
+}
+
 function flashInvalid(ownerName){
   const el = document.querySelector(`[data-jumpinput="${CSS.escape(ownerName)}"]`);
   if(el){ el.style.borderColor = 'var(--red)'; setTimeout(()=>{el.style.borderColor='var(--line)';},600); }
@@ -455,6 +477,7 @@ function ownerCardHTML(ownerName){
   const max = elig ? liveMaxBid(ownerName, tier) : null;
   const nextBid = nextLegalBid(tier);
   const canStandardBid = elig && !passed && nextBid <= max;
+  const maxBid = elig && !passed ? maxLegalBid(ownerName, tier) : null;
 
   let cls = 'owner-card';
   if(isLeader) cls += ' leader';
@@ -486,6 +509,9 @@ function ownerCardHTML(ownerName){
     <div class="oc-actions">
       <button class="btn btn-primary" ${canStandardBid?'':'disabled'}
         onclick="placeStandardBid('${ownerName}')">Bid ${fmt(nextBid)}</button>
+      <button class="btn btn-max" ${maxBid===null?'disabled':''}
+        title="Bid the most this owner can afford for Tier ${tier}"
+        onclick="placeMaxBid('${ownerName}')">Max${SHOW_BUDGETS?' '+fmt(maxBid||0):''}</button>
       <button class="btn btn-pass" ${(!elig||passed)?'disabled':''}
         onclick="passOwner('${ownerName}')">Pass</button>
     </div>
