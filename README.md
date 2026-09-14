@@ -121,10 +121,40 @@ just runs fully offline with no backend logging.
 | `index.html` | The whole operator UI — self-contained, no build step |
 | `server.js` | Zero-dependency Node backend (built-in `http` only) |
 | `db.seed.json` | The dummy database: owners, players, floors, increments |
+| `clear-db.js` | The only thing that wipes the database |
 | `db.json` | Live database, created from the seed on first run (gitignored) |
+| `backups/` | Timestamped copies made before each wipe (gitignored) |
 
-Delete `db.json` (or `npm run reset`) to start a fresh auction; it reseeds on
-the next request.
+## The database persists
+
+`db.json` survives everything except one explicit command. Stopping the server,
+restarting your machine, or hitting **Fresh Reset** in the browser all leave
+every recorded sale intact — Fresh Reset restarts the *on-screen* auction only.
+That is deliberate: a live draft should never lose its record to a stray click.
+
+On startup the server tells you which situation you are in:
+
+```
+  Loaded  7 sales, 41 events
+  State   CARRYING OVER EXISTING DATA - this will NOT be a fresh auction
+          run `node clear-db.js` to wipe it and start over
+```
+
+and the browser shows a red banner saying the same thing, with the live counts.
+Pressing **Start Auction** on a non-empty database asks you to confirm first.
+
+### Clearing it
+
+```bash
+node clear-db.js              # or: npm run clear-db
+```
+
+It prints what it is about to destroy, copies `db.json` into `backups/` with a
+timestamp, and reseeds. Pass `--no-backup` to skip the copy.
+
+Safe to run while the server is up — the server notices the file changed on disk
+and reloads before its next write. Refresh the browser afterwards to clear the
+banner.
 
 ## Auction rules encoded
 
@@ -168,13 +198,15 @@ Console output is one line per action, plus a full budget table after every sale
 | Route | Purpose |
 |---|---|
 | `GET /api/state` | The entire database |
+| `GET /api/status` | Whether the database is fresh, and what is already in it |
 | `GET /api/ledger` | Per-owner spent / budget / reserve / spendable / squad size |
 | `GET /api/log?limit=n` | The recorded event log |
 | `POST /api/event` | Record an action — `auction_start`, `player_up`, `bid`, `pass`, `sold`, `assigned`, `unsold`, `auction_complete`, `undo`, `reset` |
-| `POST /api/reset` | Reseed the database |
+| `POST /api/reset` | Restart the on-screen auction — **does not clear the database** |
 
 `undo` rolls the database back one action, matching the UI's Undo button.
 Rejected events leave no trace, so an undo always targets the last real change.
+There is no API route that wipes the database; only `clear-db.js` does that.
 
 ## Branches
 

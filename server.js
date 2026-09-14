@@ -29,11 +29,29 @@ function loadSeed() {
   return seeded;
 }
 
+let dbMtime = 0;
+
+/**
+ * clear-db.js rewrites db.json from outside this process. Without this check a
+ * running server would still hold the old auction in memory and write it
+ * straight back on the next event, silently undoing the wipe.
+ */
+function reloadIfChangedOnDisk() {
+  if (!fs.existsSync(DB_PATH)) { db = loadSeed(); saveDb(db); undoStack = []; return; }
+  const mtime = fs.statSync(DB_PATH).mtimeMs;
+  if (mtime === dbMtime) return;
+  db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+  dbMtime = mtime;
+  undoStack = [];                    // snapshots refer to a database that is gone
+  logLine('reset', 'db.json changed on disk - reloaded, undo history dropped');
+}
+
 // Write to a temp file then rename, so a crash mid-write cannot corrupt the db.
 function saveDb(next) {
   const tmp = DB_PATH + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n');
   fs.renameSync(tmp, DB_PATH);
+  dbMtime = fs.statSync(DB_PATH).mtimeMs;
 }
 
 function loadDb() {
@@ -43,6 +61,7 @@ function loadDb() {
     console.log('  db.json not found - seeded a fresh one from db.seed.json');
     return fresh;
   }
+  dbMtime = fs.statSync(DB_PATH).mtimeMs;
   return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
 }
 
@@ -69,6 +88,13 @@ function reserveFor(owner) {
   return [1, 2, 3, 4, 5]
     .filter(t => owner.roster[String(t)] === null)
     .reduce((sum, t) => sum + FLOOR()[String(t)], 0);
+}
+
+// "Fresh" means nothing has happened yet - a brand new seeded database.
+function isFresh() {
+  return db.sales.length === 0 &&
+         db.events.length === 0 &&
+         Object.values(db.owners).every(o => o.spent === 0);
 }
 
 function ledger() {
@@ -158,6 +184,8 @@ function record(ev) {
 function handleEvent(ev) {
   const type = ev && ev.type;
 
+  if (type !== 'undo') reloadIfChangedOnDisk();
+
   if (type === 'undo') {
     if (undoStack.length === 0) return { ok: false, error: 'nothing to undo' };
     db = undoStack.pop();
@@ -167,13 +195,17 @@ function handleEvent(ev) {
     return { ok: true };
   }
 
+  // A browser "Fresh Reset" restarts the on-screen auction only. The database is
+  // deliberately NOT wiped here - it persists across sessions, and the only way
+  // to clear it is `node clear-db.js`, run on purpose from a terminal.
   if (type === 'reset') {
     snapshot();
-    db = loadSeed();
-    record({ type: 'reset', note: 'database reseeded' });
+    record({ type: 'session_reset',
+             note: 'UI auction restarted - database kept, clear with node clear-db.js' });
     saveDb(db);
-    logLine('reset', 'auction reset - database reseeded from db.seed.json');
-    return { ok: true };
+    logLine('reset', 'UI auction restarted - database NOT cleared (' +
+      db.sales.length + ' sales retained). Run `node clear-db.js` to wipe.');
+    return { ok: true, cleared: false, sales: db.sales.length };
   }
 
   snapshot();
@@ -320,6 +352,19 @@ const server = http.createServer(async (req, res) => {
   // --- API ---
   if (route === '/api/state') return send(res, 200, db);
 
+  if (route === '/api/status') {
+    reloadIfChangedOnDisk();
+    return send(res, 200, {
+      fresh: isFresh(),
+      sales: db.sales.length,
+      events: db.events.length,
+      players: db.players.length,
+      committed: Object.values(db.owners).reduce((sum, o) => sum + o.spent, 0),
+      seededAt: db.meta.seededAt,
+      clearWith: 'node clear-db.js',
+    });
+  }
+
   if (route === '/api/ledger') {
     return send(res, 200, { ledger: ledger(), sales: db.sales.length });
   }
@@ -338,6 +383,8 @@ const server = http.createServer(async (req, res) => {
     return send(res, result.ok ? 200 : 409, result);
   }
 
+  // Kept for the UI's Fresh Reset: it restarts the on-screen auction but does
+  // NOT clear the database - `node clear-db.js` is the only thing that does.
   if (route === '/api/reset' && req.method === 'POST') {
     return send(res, 200, handleEvent({ type: 'reset' }));
   }
@@ -356,6 +403,15 @@ server.listen(PORT, () => {
   console.log('  UI      http://localhost:' + PORT);
   console.log('  API     /api/state - /api/ledger - /api/log - POST /api/event');
   console.log('  DB      ' + path.basename(DB_PATH) + ' (seed: ' + path.basename(SEED_PATH) + ')');
-  console.log('  Loaded  ' + db.sales.length + ' sales, ' + db.events.length + ' events\n');
-  printLedger('OPENING BUDGETS');
+  console.log('  Loaded  ' + db.sales.length + ' sales, ' + db.events.length + ' events');
+  if (isFresh()) {
+    console.log('  State   fresh database - this will be a clean auction');
+    console.log('');
+    printLedger('OPENING BUDGETS');
+  } else {
+    console.log('  State   ' + '[33m' + 'CARRYING OVER EXISTING DATA' + '[0m' + ' - this will NOT be a fresh auction');
+    console.log('          run `node clear-db.js` to wipe it and start over');
+    console.log('');
+    printLedger('BUDGETS CARRIED OVER FROM THE PREVIOUS SESSION');
+  }
 });
