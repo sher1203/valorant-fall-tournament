@@ -168,6 +168,12 @@
   .db-warning b{color:#fff;}
   .db-warning code{font-family:var(--mono);background:rgba(0,0,0,.35);padding:2px 7px;
     border-radius:4px;color:#fecaca;font-size:12.5px;}
+  .db-resume{background:rgba(59,130,246,0.12);border:1px solid var(--accent);
+    color:#bfdbfe;padding:13px 15px;border-radius:var(--radius-sm);font-size:13px;
+    margin-bottom:18px;line-height:1.6;}
+  .db-resume b{color:#fff;}
+  .db-resume code{font-family:var(--mono);background:rgba(0,0,0,.35);padding:2px 7px;
+    border-radius:4px;color:#bfdbfe;font-size:12.5px;}
   .assign-note{background:var(--sell-soft);border:1px solid var(--sell);color:#6ee7b7;
     padding:10px 12px;border-radius:var(--radius-sm);font-size:12.5px;margin-bottom:14px;
     font-weight:600;}
@@ -205,6 +211,8 @@ const API = (typeof location !== 'undefined' && /^https?:/.test(location.protoco
 // existing data is NOT a clean slate. Ask the backend and warn loudly if so.
 let dbStatus = null;
 
+let resumed = false;
+
 function checkDbStatus(){
   if(!API || typeof fetch !== 'function') return;
   fetch(API + '/status')
@@ -213,8 +221,61 @@ function checkDbStatus(){
     .catch(() => {});
 }
 
+/**
+ * Run once on load. If the backend is holding a saved auction, adopt it instead
+ * of the blank one built at boot - a refresh, a closed laptop or a crashed tab
+ * then costs nothing. A session that disagrees with the ledger is NOT restored;
+ * that gets the red warning instead, because continuing from it would have the
+ * server rejecting sales the screen thinks are fine.
+ */
+function resumeFromBackend(){
+  if(!API || typeof fetch !== 'function'){ return; }
+  fetch(API + '/session')
+    .then(r => r.json())
+    .then(s => {
+      dbStatus = Object.assign(dbStatus || {}, {
+        resumable: s.resumable, drift: s.drift, savedAt: s.savedAt
+      });
+      if(s.resumable && !s.drift){
+        state = deserializeState(s.state);
+        history = [];                 // snapshots from the old tab are gone
+        resumed = true;
+        pushLog('Session resumed from the backend database.','sys');
+      }
+      render();
+      return fetch(API + '/status').then(r => r.json()).then(st => {
+        dbStatus = Object.assign(st, {savedAt: s.savedAt});
+        render();
+      });
+    })
+    .catch(() => {});
+}
+
 function dbWarningHTML(){
   if(!dbStatus || dbStatus.fresh) return '';
+
+  if(resumed){
+    const done = state.soldOrder.length;
+    return `<div class="db-resume">
+      <b>Resumed the saved auction.</b>
+      ${done} of ${dbStatus.players} players sold so far${dbStatus.savedAt
+        ? `, last saved ${new Date(dbStatus.savedAt).toLocaleString()}` : ''}.
+      Carry on where you left off - every action keeps saving.<br>
+      To scrap it and start over, run <code>node clear-db.js</code> in your
+      terminal, then refresh.
+    </div>`;
+  }
+
+  if(dbStatus.drift){
+    return `<div class="db-warning">
+      <b>The saved session does not match the database.</b><br>
+      The saved screen shows ${dbStatus.drift.session} sales but the ledger has
+      ${dbStatus.drift.database}, so it was not restored - continuing from it would
+      have the backend rejecting sales this screen thinks are legal.<br>
+      Run <code>node clear-db.js</code> and start fresh.
+    </div>`;
+  }
+
   return `<div class="db-warning">
     <b>Heads up - the backend database already has data in it.</b><br>
     ${dbStatus.sales} of ${dbStatus.players} players are already sold and
@@ -227,15 +288,34 @@ function dbWarningHTML(){
   </div>`;
 }
 
+// state.passed is a Set, which JSON.stringify flattens to {} - convert both ways.
+function serializeState(){
+  return Object.assign({}, state, {passed: Array.from(state.passed)});
+}
+
+function deserializeState(raw){
+  return Object.assign({}, raw, {passed: new Set(raw.passed || [])});
+}
+
+// Sends are queued rather than fired in parallel. Each one carries a full copy of
+// the auction state, and the backend keeps the last one it receives - so if two
+// requests raced and arrived out of order, the saved session would silently be a
+// step behind what is on screen.
+let reportQueue = Promise.resolve();
+
 function report(type, payload){
   if(!API || typeof fetch !== 'function') return;
-  fetch(API + '/event', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(Object.assign({type}, payload || {}))
-  }).then(r => r.ok ? null : r.json().then(j => {
-    console.warn('[backend rejected]', type, j.error);
-  })).catch(() => {}); // backend down? the UI carries on regardless
+  const body = JSON.stringify(
+    Object.assign({type, state: serializeState()}, payload || {}));
+  reportQueue = reportQueue.then(() =>
+    fetch(API + '/event', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body
+    }).then(r => r.ok ? null : r.json().then(j => {
+      console.warn('[backend rejected]', type, j.error);
+    })).catch(() => {})   // backend down? the UI carries on regardless
+  );
 }
 
 function fmt(n){
@@ -368,7 +448,7 @@ function isValidJumpAmount(tier, amount){
 
 function startAuction(){
   // Refuse to start silently on top of a previous session's data.
-  if(dbStatus && !dbStatus.fresh){
+  if(dbStatus && !dbStatus.fresh && !resumed){
     const msg = 'The backend database is NOT empty.\n\n'
       + '  - ' + dbStatus.sales + ' of ' + dbStatus.players + ' players already sold\n'
       + '  - ' + dbStatus.events + ' events already logged\n'
@@ -541,6 +621,7 @@ function freshReset(){
   if(!confirm(msg)) return;
   snapshot();
   state = freshState();
+  resumed = false;
   report('reset');
   checkDbStatus();
   render();
@@ -790,7 +871,7 @@ function render(){
 
 state = freshState();
 render();
-checkDbStatus();
+resumeFromBackend();
 </script>
 </body>
 </html>

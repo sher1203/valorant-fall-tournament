@@ -92,9 +92,31 @@ function reserveFor(owner) {
 
 // "Fresh" means nothing has happened yet - a brand new seeded database.
 function isFresh() {
-  return db.sales.length === 0 &&
+  return !db.session &&
+         db.sales.length === 0 &&
          db.events.length === 0 &&
          Object.values(db.owners).every(o => o.spent === 0);
+}
+
+/**
+ * The browser ships its whole auction state with every event and we keep the
+ * latest copy. Queue order is shuffled in the browser and exists nowhere else,
+ * so without this a reload could not put the draft back the way it was.
+ *
+ * Stored outside db.events on purpose - the event log stays a readable history
+ * rather than thirty copies of the entire auction.
+ */
+function stashSession(ev) {
+  if (!ev || !ev.state) return;
+  db.session = { savedAt: new Date().toISOString(), state: ev.state };
+}
+
+// A saved session that disagrees with the ledger cannot be trusted: the server
+// would start rejecting sales the browser believes are legal.
+function sessionDrift() {
+  if (!db.session || !db.session.state) return null;
+  const seen = (db.session.state.soldOrder || []).length;
+  return seen === db.sales.length ? null : { session: seen, database: db.sales.length };
 }
 
 function ledger() {
@@ -189,6 +211,7 @@ function handleEvent(ev) {
   if (type === 'undo') {
     if (undoStack.length === 0) return { ok: false, error: 'nothing to undo' };
     db = undoStack.pop();
+    stashSession(ev);           // the browser rolled back too; keep both in step
     record({ type: 'undo', note: 'database rolled back one action' });
     saveDb(db);
     logLine('undo', 'reverted last action - database rolled back');
@@ -200,6 +223,7 @@ function handleEvent(ev) {
   // to clear it is `node clear-db.js`, run on purpose from a terminal.
   if (type === 'reset') {
     snapshot();
+    stashSession(ev);
     record({ type: 'session_reset',
              note: 'UI auction restarted - database kept, clear with node clear-db.js' });
     saveDb(db);
@@ -209,6 +233,7 @@ function handleEvent(ev) {
   }
 
   snapshot();
+  stashSession(ev);
   const result = applyEvent(ev, type);
   if (!result.ok) {
     undoStack.pop();          // discard the snapshot for an action that never happened
@@ -352,10 +377,24 @@ const server = http.createServer(async (req, res) => {
   // --- API ---
   if (route === '/api/state') return send(res, 200, db);
 
+  // Everything the browser needs on load: whether to resume, and what with.
+  if (route === '/api/session') {
+    reloadIfChangedOnDisk();
+    return send(res, 200, {
+      resumable: !!(db.session && db.session.state),
+      drift: sessionDrift(),
+      savedAt: db.session ? db.session.savedAt : null,
+      sales: db.sales.length,
+      state: db.session ? db.session.state : null,
+    });
+  }
+
   if (route === '/api/status') {
     reloadIfChangedOnDisk();
     return send(res, 200, {
       fresh: isFresh(),
+      resumable: !!(db.session && db.session.state),
+      drift: sessionDrift(),
       sales: db.sales.length,
       events: db.events.length,
       players: db.players.length,
@@ -409,7 +448,14 @@ server.listen(PORT, () => {
     console.log('');
     printLedger('OPENING BUDGETS');
   } else {
-    console.log('  State   ' + '[33m' + 'CARRYING OVER EXISTING DATA' + '[0m' + ' - this will NOT be a fresh auction');
+    if (db.session && db.session.state) {
+      console.log('  State   ' + '[33m' + 'RESUMING THE SAVED AUCTION' + '[0m' +
+        ' - saved ' + db.session.savedAt);
+      console.log('          the browser will pick up where it left off');
+    } else {
+      console.log('  State   ' + '[33m' + 'CARRYING OVER EXISTING DATA' + '[0m' +
+        ' - this will NOT be a fresh auction');
+    }
     console.log('          run `node clear-db.js` to wipe it and start over');
     console.log('');
     printLedger('BUDGETS CARRIED OVER FROM THE PREVIOUS SESSION');

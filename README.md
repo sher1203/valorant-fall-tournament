@@ -125,23 +125,42 @@ just runs fully offline with no backend logging.
 | `db.json` | Live database, created from the seed on first run (gitignored) |
 | `backups/` | Timestamped copies made before each wipe (gitignored) |
 
-## The database persists
+## The auction resumes where it left off
 
-`db.json` survives everything except one explicit command. Stopping the server,
-restarting your machine, or hitting **Fresh Reset** in the browser all leave
-every recorded sale intact — Fresh Reset restarts the *on-screen* auction only.
-That is deliberate: a live draft should never lose its record to a stray click.
+Close the tab, refresh, crash the browser, restart the server, reboot the
+machine — reopen <http://localhost:3000> and the draft is exactly as you left
+it. The current player, the standing bid, who is leading, who has passed, the
+queue order, the sold table and the log all come back:
+
+> **Resumed the saved auction.** 3 of 30 players sold so far, last saved
+> 14/09/2026, 17:32. Carry on where you left off — every action keeps saving.
+
+The browser sends its full auction state with every action and the server keeps
+the latest copy in `db.json`. That matters because the queue is shuffled in the
+browser and exists nowhere else — without it, a reload could not put the draft
+back in the same order.
+
+Two things do **not** survive a reload:
+
+- **Undo history.** Those snapshots belonged to the old page, so Undo starts
+  greyed out after resuming. Everything already recorded is still intact.
+- **A session that disagrees with the ledger.** If the saved screen and the
+  database report different numbers of sales, the session is *not* restored —
+  continuing from it would have the backend rejecting sales the screen thinks
+  are legal. You get a red banner explaining the mismatch instead.
+
+`db.json` survives everything except one explicit command. **Fresh Reset**
+restarts the *on-screen* auction but leaves every recorded sale intact — a live
+draft should never lose its record to a stray click.
 
 On startup the server tells you which situation you are in:
 
 ```
   Loaded  7 sales, 41 events
-  State   CARRYING OVER EXISTING DATA - this will NOT be a fresh auction
+  State   RESUMING THE SAVED AUCTION - saved 2026-09-14T21:32:44.886Z
+          the browser will pick up where it left off
           run `node clear-db.js` to wipe it and start over
 ```
-
-and the browser shows a red banner saying the same thing, with the live counts.
-Pressing **Start Auction** on a non-empty database asks you to confirm first.
 
 ### Clearing it
 
@@ -248,7 +267,8 @@ Console output is one line per action, plus a full budget table after every sale
 | Route | Purpose |
 |---|---|
 | `GET /api/state` | The entire database |
-| `GET /api/status` | Whether the database is fresh, and what is already in it |
+| `GET /api/status` | Whether the database is fresh or resumable, and what is already in it |
+| `GET /api/session` | The saved auction state the browser resumes from |
 | `GET /api/ledger` | Per-owner spent / budget / reserve / spendable / squad size |
 | `GET /api/log?limit=n` | The recorded event log |
 | `POST /api/event` | Record an action — `auction_start`, `player_up`, `bid`, `pass`, `sold`, `assigned`, `unsold`, `auction_complete`, `undo`, `reset` |
@@ -271,7 +291,15 @@ Close that terminal, or start this one on another port: `PORT=3001 node server.j
 off disk instead of through the server. Use <http://localhost:3000>.
 
 **The red banner will not go away** — the database still has data. Run
-`node clear-db.js`, then refresh the page.
+`node clear-db.js`, then refresh the page. A *blue* banner is not a problem: it
+means the auction resumed successfully.
+
+**It resumed when I wanted a clean start** — that is the point, and
+`node clear-db.js` is the way out. Fresh Reset restarts the screen but keeps the
+record, so the next reload resumes from the reset state.
+
+**Undo is greyed out after a refresh** — expected. Undo history lives in the
+page, not the database, so it does not survive a reload.
 
 **The backend rejected a sale** — the terminal prints the reason: the player is
 already sold, the owner already holds that tier, or they cannot afford the
