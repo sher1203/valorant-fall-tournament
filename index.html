@@ -187,6 +187,25 @@ const START_BUDGET = 100000;
 // Bidding logic and budget enforcement are unchanged. Flip to true to restore.
 const SHOW_BUDGETS = false;
 
+// ---------- BACKEND REPORTING ----------
+// Fire-and-forget: every operator action is mirrored to the Node backend, which
+// keeps the authoritative ledger and prints the bid log + post-sale budgets.
+// Only active when the page is SERVED (http://localhost:3000). Opened straight
+// off disk as file:// the app still works exactly as before, fully offline.
+const API = (typeof location !== 'undefined' && /^https?:/.test(location.protocol))
+  ? location.origin + '/api' : null;
+
+function report(type, payload){
+  if(!API || typeof fetch !== 'function') return;
+  fetch(API + '/event', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(Object.assign({type}, payload || {}))
+  }).then(r => r.ok ? null : r.json().then(j => {
+    console.warn('[backend rejected]', type, j.error);
+  })).catch(() => {}); // backend down? the UI carries on regardless
+}
+
 function fmt(n){
   if(n<0) n=0;
   if(n % 1000 === 0) return (n/1000)+"k";
@@ -219,6 +238,7 @@ function undoLast(){
   if(history.length === 0) return;
   state = history.pop();
   pushLog('Undo: reverted last action.','sys');
+  report('undo');
   render();
 }
 
@@ -318,6 +338,7 @@ function startAuction(){
   snapshot();
   state.stage = 'tier1';
   pushLog('Auction started. Tier 1 order randomized.','sys');
+  report('auction_start');
   drawNextPlayer();
   render();
 }
@@ -350,6 +371,7 @@ function drawNextPlayer(){
         state.stage = 'done';
         state.current = null;
         pushLog('All 30 players sold. Auction complete.','sys');
+        report('auction_complete');
         render();
         return;
       }
@@ -360,6 +382,7 @@ function drawNextPlayer(){
   const p = getPlayer(next.tier, next.name);
   state.current = {tier:p.tier, name:p.name, rank:p.rank};
   pushLog(`${p.name} (Tier ${p.tier}) is up for auction.`,'entry');
+  report('player_up', {player:p.name, tier:p.tier, rank:p.rank});
   render();
 }
 
@@ -374,10 +397,12 @@ function placeStandardBid(ownerName){
   state.currentBid = amt;
   state.leader = ownerName;
   pushLog(`${ownerName} bids ${fmt(amt)}.`,'entry');
+  report('bid', {owner:ownerName, amount:amt, player:state.current.name,
+                 tier, via:'increment'});
   render();
 }
 
-function placeJumpBidRaw(ownerName, amount){
+function placeJumpBidRaw(ownerName, amount, via){
   const {tier} = state.current;
   if(!isEligible(ownerName, tier)) return;
   if(state.passed.has(ownerName)) return;
@@ -388,6 +413,8 @@ function placeJumpBidRaw(ownerName, amount){
   state.currentBid = amount;
   state.leader = ownerName;
   pushLog(`${ownerName} bids ${fmt(amount)}.`,'entry');
+  report('bid', {owner:ownerName, amount, player:state.current.name,
+                 tier, via: via || 'jump'});
   render();
 }
 
@@ -395,7 +422,7 @@ function placeMaxBid(ownerName){
   if(!state.current) return;
   const amt = maxLegalBid(ownerName, state.current.tier);
   if(amt === null) return;
-  placeJumpBidRaw(ownerName, amt);
+  placeJumpBidRaw(ownerName, amt, 'max');
 }
 
 function flashInvalid(ownerName){
@@ -407,6 +434,8 @@ function passOwner(ownerName){
   snapshot();
   state.passed.add(ownerName);
   pushLog(`${ownerName} passes.`,'entry');
+  report('pass', {owner:ownerName, player:state.current && state.current.name,
+                  tier: state.current && state.current.tier});
   render();
 }
 
@@ -425,6 +454,7 @@ function sellToLeader(){
   p.price = price;
   state.soldOrder.push({tier, name, owner:state.leader, price, rank:p.rank});
   pushLog(`${name} SOLD to ${state.leader} for ${fmt(price)}.`,'sold');
+  report('sold', {owner:state.leader, player:name, tier, price});
   drawNextPlayer();
 }
 
@@ -433,6 +463,7 @@ function markUnsold(){
   snapshot();
   const {tier, name} = state.current;
   pushLog(`${name} UNSOLD.`,'unsold');
+  report('unsold', {player:name, tier});
   state.unsoldQueue.push({tier, name});
   drawNextPlayer();
 }
@@ -455,6 +486,7 @@ function assignToRemainingOwner(){
   p.price = price;
   state.soldOrder.push({tier, name, owner:ownerName, price, rank:p.rank});
   pushLog(`${name} ASSIGNED to ${ownerName} at floor price ${fmt(price)} (last eligible owner).`,'sold');
+  report('assigned', {owner:ownerName, player:name, tier, price});
   drawNextPlayer();
 }
 
@@ -462,6 +494,7 @@ function freshReset(){
   if(!confirm('Reset the entire auction? All progress will be lost.')) return;
   snapshot();
   state = freshState();
+  report('reset');
   render();
 }
 
