@@ -174,6 +174,12 @@
   .db-resume b{color:#fff;}
   .db-resume code{font-family:var(--mono);background:rgba(0,0,0,.35);padding:2px 7px;
     border-radius:4px;color:#bfdbfe;font-size:12.5px;}
+  .banner-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:11px;}
+  .banner-actions .btn{padding:8px 15px;font-size:12.5px;}
+  .btn-resume{background:var(--sell);border-color:var(--sell);color:var(--sell-ink);font-weight:800;}
+  .btn-resume:hover:not(:disabled){background:var(--sell-hover);border-color:var(--sell-hover);}
+  .btn-wipe{background:transparent;border-color:var(--danger);color:#fecaca;font-weight:700;}
+  .btn-wipe:hover:not(:disabled){background:rgba(248,113,113,.16);color:#fff;}
   .assign-note{background:var(--sell-soft);border:1px solid var(--sell);color:#6ee7b7;
     padding:10px 12px;border-radius:var(--radius-sm);font-size:12.5px;margin-bottom:14px;
     font-weight:600;}
@@ -212,6 +218,9 @@ const API = (typeof location !== 'undefined' && /^https?:/.test(location.protoco
 let dbStatus = null;
 
 let resumed = false;
+let backendSynced = false;      // have we successfully read the backend at least once?
+let backendDown = false;        // is it unreachable right now?
+let resumeAttempts = 0;
 
 function checkDbStatus(){
   if(!API || typeof fetch !== 'function') return;
@@ -229,29 +238,115 @@ function checkDbStatus(){
  * server rejecting sales the screen thinks are fine.
  */
 function resumeFromBackend(){
-  if(!API || typeof fetch !== 'function'){ return; }
-  fetch(API + '/session')
+  if(!API || typeof fetch !== 'function') return Promise.resolve();
+  return fetch(API + '/session')
     .then(r => r.json())
     .then(s => {
+      backendDown = false;
       dbStatus = Object.assign(dbStatus || {}, {
         resumable: s.resumable, drift: s.drift, savedAt: s.savedAt
       });
-      if(s.resumable && !s.drift){
+
+      // Only adopt a saved auction onto an untouched page. If the operator has
+      // already started working - because the backend was unreachable when they
+      // opened it - their live draft wins, and the mismatch is surfaced instead.
+      const untouched = state.stage === 'setup' && state.soldOrder.length === 0;
+
+      if(s.resumable && !s.drift && untouched){
         state = deserializeState(s.state);
         history = [];                 // snapshots from the old tab are gone
         resumed = true;
         pushLog('Session resumed from the backend database.','sys');
+      } else if(s.resumable && !untouched){
+        pushLog('Backend holds a saved auction, but this page already has one. '
+          + 'Nothing was overwritten.','sys');
       }
+
+      backendSynced = true;
       render();
       return fetch(API + '/status').then(r => r.json()).then(st => {
         dbStatus = Object.assign(st, {savedAt: s.savedAt});
         render();
       });
     })
-    .catch(() => {});
+    .catch(() => {
+      // Most often the page was opened before the server finished starting.
+      // Keep trying: until this succeeds no state is sent, so nothing is lost.
+      backendDown = true;
+      backendSynced = false;
+      render();
+      if(++resumeAttempts <= 20) setTimeout(resumeFromBackend, 3000);
+    });
+}
+
+/** Adopt the backend's saved auction on demand (the Resume Auction button). */
+function resumeNow(){
+  if(!API) return;
+  const busy = state.stage !== 'setup' || state.soldOrder.length > 0;
+  if(busy){
+    const warn = 'This page already has an auction in progress.\n\n'
+      + 'Loading the saved one will discard what is on screen now.\n\n'
+      + 'Continue?';
+    if(!confirm(warn)) return;
+  }
+  fetch(API + '/session').then(r => r.json()).then(s => {
+    if(!s.resumable){ alert('The backend has no saved auction to resume.'); return; }
+    if(s.drift){
+      alert('The saved auction does not match the ledger (' + s.drift.session
+        + ' sales vs ' + s.drift.database + '), so it cannot be trusted.\nReset the auction and start over.');
+      return;
+    }
+    state = deserializeState(s.state);
+    history = [];
+    resumed = true;
+    backendSynced = true;
+    pushLog('Session resumed from the backend database.','sys');
+    render();
+    checkDbStatus();
+  }).catch(() => alert('Could not reach the backend.'));
+}
+
+/** Wipe the database and start over (the Reset Auction button). */
+function resetAuction(){
+  if(!API) return;
+  const sold = (dbStatus && dbStatus.sales) || 0;
+  const warn = 'Reset the auction completely?\n\n'
+    + 'This wipes the backend database - ' + sold + ' recorded sale(s) and the\n'
+    + 'saved session all go. A timestamped backup is written to backups/ first.\n\n'
+    + 'There is no undo for this.';
+  if(!confirm(warn)) return;
+  fetch(API + '/clear', {method:'POST'}).then(r => r.json()).then(res => {
+    state = freshState();
+    history = [];
+    resumed = false;
+    backendSynced = true;
+    render();
+    checkDbStatus();
+    if(res.backup) console.info('[auction] previous database saved to backups/' + res.backup);
+  }).catch(() => alert('Could not reach the backend.'));
+}
+
+function bannerActionsHTML(showResume){
+  return `<div class="banner-actions">
+    ${showResume ? `<button class="btn btn-resume" onclick="resumeNow()">Resume Auction</button>` : ''}
+    <button class="btn btn-wipe" onclick="resetAuction()">Reset Auction</button>
+  </div>`;
 }
 
 function dbWarningHTML(){
+  // Loudest case first: we cannot reach the backend, so nothing is being saved
+  // and we cannot know whether a draft is waiting on the other side.
+  if(backendDown){
+    return `<div class="db-warning">
+      <b>Backend unreachable - nothing is being recorded.</b><br>
+      This page cannot talk to <code>${API}</code>. Any auction you run now is
+      kept in the browser only, and a saved draft on the server (if there is one)
+      is being left untouched rather than overwritten.<br>
+      Start the server with <code>node server.js</code> and this will reconnect
+      on its own - no refresh needed.
+    </div>`;
+  }
+
   if(!dbStatus || dbStatus.fresh) return '';
 
   if(resumed){
@@ -261,8 +356,9 @@ function dbWarningHTML(){
       ${done} of ${dbStatus.players} players sold so far${dbStatus.savedAt
         ? `, last saved ${new Date(dbStatus.savedAt).toLocaleString()}` : ''}.
       Carry on where you left off - every action keeps saving.<br>
-      To scrap it and start over, run <code>node clear-db.js</code> in your
-      terminal, then refresh.
+      To scrap it and start over, use <b>Reset Auction</b> below (or run
+      <code>node clear-db.js</code> in your terminal).
+      ${bannerActionsHTML(false)}
     </div>`;
   }
 
@@ -272,7 +368,8 @@ function dbWarningHTML(){
       The saved screen shows ${dbStatus.drift.session} sales but the ledger has
       ${dbStatus.drift.database}, so it was not restored - continuing from it would
       have the backend rejecting sales this screen thinks are legal.<br>
-      Run <code>node clear-db.js</code> and start fresh.
+      Reset the auction and start over.
+      ${bannerActionsHTML(false)}
     </div>`;
   }
 
@@ -283,8 +380,10 @@ function dbWarningHTML(){
     across the league. Anything you run now continues on top of that, so
     <b>this will not be a fresh auction</b> and the backend will reject re-selling
     a player an owner already holds.<br>
-    To start clean, stop and run <code>node clear-db.js</code> in your terminal,
-    then refresh this page.
+    ${dbStatus.resumable
+      ? 'Use <b>Resume Auction</b> to pick the saved draft back up, or'
+      : 'Use'} <b>Reset Auction</b> to wipe it and start clean.
+    ${bannerActionsHTML(!!dbStatus.resumable)}
   </div>`;
 }
 
@@ -305,8 +404,12 @@ let reportQueue = Promise.resolve();
 
 function report(type, payload){
   if(!API || typeof fetch !== 'function') return;
-  const body = JSON.stringify(
-    Object.assign({type, state: serializeState()}, payload || {}));
+  // Until we have successfully read the backend we do not know whether it is
+  // holding a draft, so we send the action WITHOUT state rather than risk
+  // saving a blank auction over a real one.
+  const ev = Object.assign({type}, payload || {});
+  if(backendSynced) ev.state = serializeState();
+  const body = JSON.stringify(ev);
   reportQueue = reportQueue.then(() =>
     fetch(API + '/event', {
       method: 'POST',
@@ -448,6 +551,13 @@ function isValidJumpAmount(tier, amount){
 
 function startAuction(){
   // Refuse to start silently on top of a previous session's data.
+  if(backendDown){
+    const warn = 'The backend is unreachable, so nothing will be recorded\n'
+      + 'and a saved draft may be waiting on the server.\n\n'
+      + 'Start it with "node server.js" and this page reconnects by itself.\n\n'
+      + 'Run an unrecorded auction anyway?';
+    if(!confirm(warn)) return;
+  }
   if(dbStatus && !dbStatus.fresh && !resumed){
     const msg = 'The backend database is NOT empty.\n\n'
       + '  - ' + dbStatus.sales + ' of ' + dbStatus.players + ' players already sold\n'
