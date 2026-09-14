@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Auction Operator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    /* Slate "control-room" ramp — grounded in the AdminLTE / dark-dashboard
+       standard (canvas #0f172a, cards #1e293b, text #e2e8f0), surfaces lifted
+       ~5% per layer, borders bumped for 3:1 non-text contrast. */
+    --bg:#0b111c;
+    --panel:#131c2b;
+    --panel2:#1a2537;
+    --panel3:#233044;
+    --line:#2c3a4f;
+    --line-soft:#22303f;
+    --text:#e8eef6;
+    --sub:#93a1b5;
+    --sub-dim:#5c6b80;
+
+    --accent:#3b82f6;        /* bid / primary */
+    --accent-strong:#2563eb;
+    --accent-hover:#1d4ed8;
+    --accent-ink:#f8fafc;
+
+    --sell:#10b981;          /* commit / sell */
+    --sell-hover:#0ea472;
+    --sell-ink:#04231a;
+    --sell-soft:rgba(16,185,129,0.13);
+
+    --op:#2f3d54;            /* operator / neutral */
+    --op-hover:#3a4a64;
+    --op-ink:#dce4ef;
+
+    --danger:#f87171;
+
+    --mono:'SF Mono','Consolas','Courier New',monospace;
+    --radius:12px;
+    --radius-sm:7px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,'Segoe UI',Arial,Helvetica,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  body{padding:22px;max-width:1440px;margin:0 auto;}
+  h1,h2,h3{margin:0;}
+  .title-row{display:flex;align-items:center;justify-content:space-between;
+    flex-wrap:wrap;gap:12px;margin-bottom:20px;padding-bottom:16px;
+    border-bottom:1px solid var(--line);}
+  .title-row h1{font-size:21px;letter-spacing:-0.3px;font-weight:750;}
+  .title-row h1 span{color:var(--accent);}
+  .stage-pill{font-size:12px;font-weight:600;color:var(--text);border:1px solid var(--line);
+    padding:6px 13px;border-radius:20px;background:var(--panel2);display:flex;align-items:center;gap:7px;}
+  .stage-pill::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--sell);
+    display:inline-block;box-shadow:0 0 0 3px var(--sell-soft);animation:pulse 2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.45;}}
+  @media(prefers-reduced-motion:reduce){.stage-pill::before{animation:none;}}
+  .btn{background:var(--panel3);color:var(--text);border:1px solid var(--line);
+    padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;border-radius:var(--radius-sm);
+    transition:background .12s ease,border-color .12s ease,transform .04s ease;}
+  .btn:hover:not(:disabled){border-color:var(--sub-dim);background:#2b3a51;}
+  .btn:active:not(:disabled){transform:translateY(1px);}
+  .btn:disabled{opacity:.32;cursor:not-allowed;}
+  .btn-primary{background:var(--accent-strong);border-color:var(--accent-strong);color:var(--accent-ink);font-weight:700;}
+  .btn-primary:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover);}
+  .btn-sell{background:var(--sell);border-color:var(--sell);color:var(--sell-ink);font-weight:800;letter-spacing:.2px;}
+  .btn-sell:hover:not(:disabled){background:var(--sell-hover);border-color:var(--sell-hover);}
+  .btn-operator{background:var(--op);border-color:var(--op);color:var(--op-ink);font-weight:600;}
+  .btn-operator:hover:not(:disabled){background:var(--op-hover);border-color:var(--op-hover);}
+  .btn-pass{background:transparent;border-color:var(--line);color:var(--sub);}
+  .btn-pass:hover:not(:disabled){color:var(--text);border-color:var(--sub-dim);background:var(--panel2);}
+  .controls-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;}
+  .layout{display:grid;grid-template-columns:1fr;gap:18px;}
+  @media(min-width:980px){.layout{grid-template-columns:2.1fr 1fr;}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px;}
+  .panel h2{font-size:11.5px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);
+    margin-bottom:14px;font-weight:700;}
+  /* Focal current-player panel gets a tier-colored top edge */
+  .panel.current{position:relative;overflow:hidden;background:linear-gradient(180deg,var(--panel2),var(--panel) 90px);}
+  .panel.current::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:var(--edge,var(--accent));}
+  .current-player{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:18px;}
+  .cp-name{font-size:30px;font-weight:850;letter-spacing:-0.5px;}
+  .tier-badge{display:inline-block;font-size:11px;font-weight:800;padding:4px 10px;
+    border-radius:5px;margin-right:6px;letter-spacing:0.3px;}
+  /* Rank-chip tier palette: gold apex, warm→cool spread, all take dark ink */
+  .t1{background:#fbbf24;color:#231a02;} .t2{background:#fb7185;color:#2b0710;}
+  .t3{background:#a78bfa;color:#1c1233;} .t4{background:#38bdf8;color:#04212f;}
+  .t5{background:#34d399;color:#032417;}
+  .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px;}
+  @media(min-width:600px){.stat-grid{grid-template-columns:repeat(4,1fr);}}
+  .stat-box{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-sm);
+    padding:11px 13px;}
+  .panel.current .stat-box{background:var(--bg);}
+  .stat-box .label{font-size:10px;text-transform:uppercase;color:var(--sub);letter-spacing:.6px;
+    font-weight:600;}
+  .stat-box .value{font-size:19px;font-weight:750;margin-top:4px;letter-spacing:-0.3px;}
+  .owner-cards{display:grid;grid-template-columns:1fr;gap:10px;}
+  @media(min-width:700px){.owner-cards{grid-template-columns:1fr 1fr;}}
+  .owner-card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px;position:relative;transition:border-color .15s,box-shadow .15s;}
+  .owner-card.leader{border-color:var(--sell);box-shadow:0 0 0 1px var(--sell),0 6px 20px -8px var(--sell);
+    background:linear-gradient(180deg,var(--sell-soft),var(--panel2) 55%);}
+  .owner-card.passed{opacity:.5;}
+  .owner-card.ineligible{opacity:.55;
+    background:repeating-linear-gradient(135deg,var(--panel2),var(--panel2) 9px,#151f2f 9px,#151f2f 18px);}
+  .oc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .oc-name{font-weight:700;font-size:15px;}
+  .oc-tag{font-size:10px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;}
+  .oc-tag.leader{background:var(--sell);color:var(--sell-ink);}
+  .oc-tag.passed{background:var(--sub-dim);color:var(--bg);}
+  .oc-tag.ineligible{background:var(--op);color:var(--sub);border:1px solid var(--line);}
+  .oc-stats{display:flex;gap:16px;margin-bottom:12px;}
+  .oc-stat{flex:1;}
+  .oc-stat .label{font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.4px;
+    font-weight:600;margin-bottom:2px;}
+  .oc-stat .val{font-size:16px;font-weight:750;}
+  .oc-actions{display:flex;gap:8px;margin-bottom:8px;}
+  .oc-actions .btn{padding:9px 10px;font-size:12.5px;flex:1;}
+  .jump-row{display:flex;gap:6px;align-items:center;}
+  .jump-wrap{position:relative;flex:1;}
+  .jump-wrap input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);
+    padding:8px 22px 8px 10px;border-radius:var(--radius-sm);font-size:12.5px;transition:border-color .15s;}
+  .jump-wrap input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.2);}
+  .jump-wrap span{position:absolute;right:9px;top:50%;transform:translateY(-50%);
+    font-size:11px;color:var(--sub);pointer-events:none;}
+  .jump-row .btn{padding:8px 14px;font-size:12.5px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th,td{padding:9px 8px;border-bottom:1px solid var(--line-soft);text-align:left;}
+  th{color:var(--sub);text-transform:uppercase;font-size:10px;letter-spacing:.5px;font-weight:700;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:var(--panel2);}
+  .log-box{max-height:280px;overflow-y:auto;font-family:var(--mono);font-size:12px;
+    line-height:1.9;color:var(--sub);}
+  .log-box .entry{color:var(--text);}
+  .log-box .entry.sold{color:#34d399;font-weight:600;}
+  .log-box .entry.unsold{color:var(--sub);}
+  .log-box .entry.sys{color:#60a5fa;font-weight:600;}
+  .ptc-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;}
+  .ptc-item{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:8px 10px;
+    background:var(--panel2);border-radius:var(--radius-sm);border:1px solid var(--line-soft);}
+  .ptc-sub{color:var(--sub);font-size:10.5px;margin:14px 0 8px;text-transform:uppercase;
+    letter-spacing:.6px;font-weight:700;}
+  .ptc-sub:first-child{margin-top:0;}
+  .setup-screen{max-width:600px;margin:90px auto;text-align:center;}
+  .setup-screen h1{font-size:34px;margin-bottom:14px;font-weight:850;letter-spacing:-0.6px;}
+  .setup-screen h1 span{color:var(--accent);}
+  .setup-screen p{color:var(--sub);margin-bottom:28px;font-size:14.5px;line-height:1.7;}
+  .final-grid{display:grid;grid-template-columns:1fr;gap:14px;}
+  @media(min-width:900px){.final-grid{grid-template-columns:repeat(3,1fr);}}
+  .final-card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:16px;}
+  .final-card h3{font-size:16px;margin-bottom:10px;color:var(--text);font-weight:800;}
+  .final-card .slot{display:flex;justify-content:space-between;align-items:center;font-size:13px;
+    padding:7px 0;border-bottom:1px solid var(--line-soft);}
+  .final-card .slot .tag{color:var(--sub);font-size:11px;font-weight:600;}
+  .final-card .totals{margin-top:10px;font-size:12.5px;color:var(--sub);display:flex;
+    justify-content:space-between;font-weight:600;}
+  .final-card .totals b{color:var(--text);}
+  .empty-msg{color:var(--sub-dim);font-size:12.5px;font-style:italic;padding:6px 0;}
+  .assign-note{background:var(--sell-soft);border:1px solid var(--sell);color:#6ee7b7;
+    padding:10px 12px;border-radius:var(--radius-sm);font-size:12.5px;margin-bottom:14px;
+    font-weight:600;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const OWNER_NAMES = ["Vinnie","Sabid","Kazi","Zihan","Prapya","Zany"];
+const TIER_PLAYERS = {
+  1: ["Rih#117","PSYCO#1751","Uniccccccccccccc #666","Clash Killer #Zyl","Wagyu #tasty","NotRhythmQ"],
+  2: ["Redeyeee#RedZ","RUSHAFI#senti","carrozzeria#2006","wallows#meow","Tawf#IQUR","Shiraj #dhoka"],
+  3: ["TheBrownieGuy#1419","Sameer#Bara","DocTor PH0EN1X #R1SEN","DowryNegotiator #easy","S4B1D#6969","linear#NotIt"],
+  4: ["NotDabu","Hype#yyz","Howl#dubs","nahianishot#5049","rakaluvr #NH3","Veneno#ERN"],
+  5: ["Armin#33333","MrSkylight#ezpz","NoBrainNoAim","Enternet#1234","Valcrow #1674","Mercenary0x#500r"]
+};
+const FLOOR = {1:20000,2:10000,3:7000,4:5000,5:2000};
+const INCR  = {1:2000, 2:2000, 3:2000, 4:1000,5:1000};
+const START_BUDGET = 100000;
+
+function fmt(n){
+  if(n<0) n=0;
+  if(n % 1000 === 0) return (n/1000)+"k";
+  return (n/1000).toFixed(1)+"k";
+}
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+let state = null;
+let history = [];
+const MAX_HISTORY = 50;
+
+function cloneState(s){
+  // structuredClone preserves Set objects (state.passed) correctly.
+  return structuredClone(s);
+}
+
+function snapshot(){
+  history.push(cloneState(state));
+  if(history.length > MAX_HISTORY) history.shift();
+}
+
+function undoLast(){
+  if(history.length === 0) return;
+  state = history.pop();
+  pushLog('Undo: reverted last action.','sys');
+  render();
+}
+
+function freshState(){
+  const owners = {};
+  OWNER_NAMES.forEach(n => owners[n] = {name:n, budget:START_BUDGET, spent:0,
+    roster:{1:null,2:null,3:null,4:null,5:null}});
+
+  const players = {};
+  for(const t of [1,2,3,4,5]){
+    players[t] = TIER_PLAYERS[t].map((name,i)=>({
+      name, tier:t, rank:i+1, sold:false, soldTo:null, price:null
+    }));
+  }
+
+  const tier1Queue = shuffle(players[1].map(p=>({tier:1, name:p.name})));
+
+  return {
+    owners, players,
+    stage:'setup', // setup -> tier1 -> stage2 -> done
+    queue: tier1Queue,
+    unsoldQueue: [],
+    passNum: 1,
+    current: null,
+    currentBid: 0,
+    leader: null,
+    passed: new Set(),
+    log: [],
+    soldOrder: []
+  };
+}
+
+function pushLog(msg, cls){
+  state.log.unshift({msg, cls: cls||'entry'});
+}
+
+function getPlayer(tier, name){
+  return state.players[tier].find(p=>p.name===name);
+}
+
+function tiersOwnerNeeds(ownerName, excludeTier){
+  const o = state.owners[ownerName];
+  const needs = [];
+  for(const t of [1,2,3,4,5]){
+    if(t === excludeTier) continue;
+    if(o.roster[t] === null) needs.push(t);
+  }
+  return needs;
+}
+
+function liveMaxBid(ownerName, tier){
+  const o = state.owners[ownerName];
+  if(o.roster[tier] !== null) return -Infinity; // ineligible
+  const reserve = tiersOwnerNeeds(ownerName, tier).reduce((s,t)=>s+FLOOR[t],0);
+  return o.budget - reserve;
+}
+
+function isEligible(ownerName, tier){
+  return state.owners[ownerName].roster[tier] === null;
+}
+
+function eligibleOwners(tier){
+  return OWNER_NAMES.filter(n=>isEligible(n,tier));
+}
+
+function auctionCap(tier){
+  const elig = eligibleOwners(tier);
+  if(elig.length===0) return 0;
+  return Math.max(...elig.map(n=>liveMaxBid(n,tier)));
+}
+
+function nextLegalBid(tier){
+  if(state.currentBid === 0) return FLOOR[tier];
+  return state.currentBid + INCR[tier];
+}
+
+function isValidJumpAmount(tier, amount){
+  if(!Number.isFinite(amount)) return false;
+  if(amount < nextLegalBid(tier)) return false;
+  if((amount - FLOOR[tier]) % INCR[tier] !== 0) return false;
+  return true;
+}
+
+function startAuction(){
+  snapshot();
+  state.stage = 'tier1';
+  pushLog('Auction started. Tier 1 order randomized.','sys');
+  drawNextPlayer();
+  render();
+}
+
+function drawNextPlayer(){
+  state.currentBid = 0;
+  state.leader = null;
+  state.passed = new Set();
+
+  if(state.queue.length === 0){
+    if(state.unsoldQueue.length > 0){
+      state.passNum += 1;
+      state.queue = shuffle(state.unsoldQueue);
+      state.unsoldQueue = [];
+      const label = state.stage === 'tier1' ? 'Tier 1' : 'Tier 2-5';
+      pushLog(`Starting ${label} pass ${state.passNum}.`,'sys');
+    } else {
+      if(state.stage === 'tier1'){
+        state.stage = 'stage2';
+        state.passNum = 1;
+        let pool = [];
+        for(const t of [2,3,4,5]){
+          for(const p of state.players[t]){
+            if(!p.sold) pool.push({tier:t, name:p.name});
+          }
+        }
+        state.queue = shuffle(pool);
+        pushLog('Tier 1 complete. Beginning Tier 2-5 auction (24 players, shuffled).','sys');
+      } else if(state.stage === 'stage2'){
+        state.stage = 'done';
+        state.current = null;
+        pushLog('All 30 players sold. Auction complete.','sys');
+        render();
+        return;
+      }
+    }
+  }
+
+  const next = state.queue.shift();
+  const p = getPlayer(next.tier, next.name);
+  state.current = {tier:p.tier, name:p.name, rank:p.rank};
+  pushLog(`${p.name} (Tier ${p.tier}) is up for auction.`,'entry');
+  render();
+}
+
+function placeStandardBid(ownerName){
+  const {tier} = state.current;
+  if(!isEligible(ownerName, tier)) return;
+  if(state.passed.has(ownerName)) return;
+  const amt = nextLegalBid(tier);
+  const max = liveMaxBid(ownerName, tier);
+  if(amt > max) return;
+  snapshot();
+  state.currentBid = amt;
+  state.leader = ownerName;
+  pushLog(`${ownerName} bids ${fmt(amt)}.`,'entry');
+  render();
+}
+
+function placeJumpBidRaw(ownerName, amount){
+  const {tier} = state.current;
+  if(!isEligible(ownerName, tier)) return;
+  if(state.passed.has(ownerName)) return;
+  if(!isValidJumpAmount(tier, amount)) { flashInvalid(ownerName); return; }
+  const max = liveMaxBid(ownerName, tier);
+  if(amount > max){ flashInvalid(ownerName); return; }
+  snapshot();
+  state.currentBid = amount;
+  state.leader = ownerName;
+  pushLog(`${ownerName} bids ${fmt(amount)}.`,'entry');
+  render();
+}
+
+function flashInvalid(ownerName){
+  const el = document.querySelector(`[data-jumpinput="${CSS.escape(ownerName)}"]`);
+  if(el){ el.style.borderColor = 'var(--red)'; setTimeout(()=>{el.style.borderColor='var(--line)';},600); }
+}
+
+function passOwner(ownerName){
+  snapshot();
+  state.passed.add(ownerName);
+  pushLog(`${ownerName} passes.`,'entry');
+  render();
+}
+
+function sellToLeader(){
+  if(!state.leader || !state.current) return;
+  snapshot();
+  const {tier, name} = state.current;
+  const p = getPlayer(tier, name);
+  const price = state.currentBid;
+  const o = state.owners[state.leader];
+  o.budget -= price;
+  o.spent += price;
+  o.roster[tier] = name;
+  p.sold = true;
+  p.soldTo = state.leader;
+  p.price = price;
+  state.soldOrder.push({tier, name, owner:state.leader, price, rank:p.rank});
+  pushLog(`${name} SOLD to ${state.leader} for ${fmt(price)}.`,'sold');
+  drawNextPlayer();
+}
+
+function markUnsold(){
+  if(!state.current) return;
+  snapshot();
+  const {tier, name} = state.current;
+  pushLog(`${name} UNSOLD.`,'unsold');
+  state.unsoldQueue.push({tier, name});
+  drawNextPlayer();
+}
+
+function assignToRemainingOwner(){
+  if(!state.current || state.current.tier !== 1) return;
+  const elig = eligibleOwners(1);
+  if(elig.length !== 1) return;
+  snapshot();
+  const ownerName = elig[0];
+  const {tier, name} = state.current;
+  const p = getPlayer(tier, name);
+  const price = FLOOR[1];
+  const o = state.owners[ownerName];
+  o.budget -= price;
+  o.spent += price;
+  o.roster[tier] = name;
+  p.sold = true;
+  p.soldTo = ownerName;
+  p.price = price;
+  state.soldOrder.push({tier, name, owner:ownerName, price, rank:p.rank});
+  pushLog(`${name} ASSIGNED to ${ownerName} at floor price ${fmt(price)} (last eligible owner).`,'sold');
+  drawNextPlayer();
+}
+
+function freshReset(){
+  if(!confirm('Reset the entire auction? All progress will be lost.')) return;
+  snapshot();
+  state = freshState();
+  render();
+}
+
+// ---------- RENDER ----------
+
+function ownerCardHTML(ownerName){
+  const o = state.owners[ownerName];
+  if(!state.current) return '';
+  const {tier} = state.current;
+  const elig = isEligible(ownerName, tier);
+  const passed = state.passed.has(ownerName);
+  const isLeader = state.leader === ownerName;
+  const max = elig ? liveMaxBid(ownerName, tier) : null;
+  const nextBid = nextLegalBid(tier);
+  const canStandardBid = elig && !passed && nextBid <= max;
+
+  let cls = 'owner-card';
+  if(isLeader) cls += ' leader';
+  else if(passed) cls += ' passed';
+  else if(!elig) cls += ' ineligible';
+
+  let tag = '';
+  if(isLeader) tag = '<span class="oc-tag leader">LEADING</span>';
+  else if(passed) tag = '<span class="oc-tag passed">PASSED</span>';
+  else if(!elig) tag = '<span class="oc-tag ineligible">OWNS T'+tier+'</span>';
+
+  return `
+  <div class="${cls}">
+    <div class="oc-top">
+      <div class="oc-name">${ownerName}</div>
+      ${tag}
+    </div>
+    <div class="oc-stats">
+      <div class="oc-stat">
+        <div class="label">Budget</div>
+        <div class="val">${fmt(o.budget)}</div>
+      </div>
+      <div class="oc-stat">
+        <div class="label">Live Max</div>
+        <div class="val">${elig ? fmt(Math.max(max,0)) : '—'}</div>
+      </div>
+    </div>
+    <div class="oc-actions">
+      <button class="btn btn-primary" ${canStandardBid?'':'disabled'}
+        onclick="placeStandardBid('${ownerName}')">Bid ${fmt(nextBid)}</button>
+      <button class="btn btn-pass" ${(!elig||passed)?'disabled':''}
+        onclick="passOwner('${ownerName}')">Pass</button>
+    </div>
+    <div class="jump-row">
+      <div class="jump-wrap">
+        <input type="number" step="1" placeholder="e.g. 76" data-jumpinput="${ownerName}"
+          ${(!elig||passed)?'disabled':''} id="jump-${ownerName.replace(/[^a-zA-Z0-9]/g,'')}"
+          onkeydown="if(event.key==='Enter')submitJump('${ownerName}')">
+        <span>k</span>
+      </div>
+      <button class="btn btn-primary" ${(!elig||passed)?'disabled':''}
+        onclick="submitJump('${ownerName}')">Jump</button>
+    </div>
+  </div>`;
+}
+
+function submitJump(ownerName){
+  const el = document.getElementById('jump-'+ownerName.replace(/[^a-zA-Z0-9]/g,''));
+  const val = parseFloat(el.value);
+  if(!val){ return; }
+  // Input is entered in "k" units to match the displayed values (e.g. 76 = 76,000 credits).
+  placeJumpBidRaw(ownerName, Math.round(val*1000));
+  el.value = '';
+}
+
+function playersYetToComeHTML(){
+  // Display sorted by tier then name — deliberately NOT queue order,
+  // so the on-screen list never reveals who comes up next.
+  const sortForDisplay = (arr) => arr.slice().sort((a,b)=>
+    a.tier - b.tier || a.name.localeCompare(b.name));
+  const renderItem = (q) => {
+    const p = getPlayer(q.tier,q.name);
+    return `<div class="ptc-item"><span>${p.name}</span><span class="tier-badge t${q.tier}">T${q.tier}</span></div>`;
+  };
+  const currentPassItems = sortForDisplay(state.queue).map(renderItem).join('')
+    || '<div class="empty-msg">None waiting in this pass.</div>';
+  const nextPassItems = sortForDisplay(state.unsoldQueue).map(renderItem).join('')
+    || '<div class="empty-msg">None waiting for next pass.</div>';
+
+  return `
+    <div class="ptc-sub">Waiting — current pass (${state.queue.length})</div>
+    <div class="ptc-list">${currentPassItems}</div>
+    <div class="ptc-sub">Unsold — waiting for next pass (${state.unsoldQueue.length})</div>
+    <div class="ptc-list">${nextPassItems}</div>
+  `;
+}
+
+function soldListHTML(){
+  if(state.soldOrder.length===0) return '<div class="empty-msg">No sales yet.</div>';
+  const rows = state.soldOrder.slice().reverse().map(s=>
+    `<tr><td><span class="tier-badge t${s.tier}">T${s.tier}</span>${s.name}</td><td>${s.owner}</td><td>${fmt(s.price)}</td></tr>`
+  ).join('');
+  return `<table><thead><tr><th>Player</th><th>Owner</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function teamBoardHTML(){
+  const rows = OWNER_NAMES.map(name=>{
+    const o = state.owners[name];
+    const cells = [1,2,3,4,5].map(t=>o.roster[t] ? o.roster[t] : '—').join('</td><td>');
+    return `<tr><td><b>${name}</b></td><td>${fmt(o.budget)}</td><td>${cells}</td></tr>`;
+  }).join('');
+  return `<table>
+    <thead><tr><th>Owner</th><th>Budget</th><th>T1</th><th>T2</th><th>T3</th><th>T4</th><th>T5</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function logHTML(){
+  if(state.log.length===0) return '<div class="empty-msg">Log is empty.</div>';
+  return state.log.map(e=>`<div class="entry ${e.cls}">${e.msg}</div>`).join('');
+}
+
+function statGrid(){
+  if(!state.current) return '';
+  const {tier, name, rank} = state.current;
+  const cap = auctionCap(tier);
+  return `
+  <div class="stat-grid">
+    <div class="stat-box"><div class="label">Tier</div><div class="value">T${tier}</div></div>
+    <div class="stat-box"><div class="label">Rank in Tier</div><div class="value">#${rank}</div></div>
+    <div class="stat-box"><div class="label">Floor Price</div><div class="value">${fmt(FLOOR[tier])}</div></div>
+    <div class="stat-box"><div class="label">Min Increase</div><div class="value">${fmt(INCR[tier])}</div></div>
+    <div class="stat-box"><div class="label">Current Bid</div><div class="value">${state.currentBid?fmt(state.currentBid):'—'}</div></div>
+    <div class="stat-box"><div class="label">Current Leader</div><div class="value">${state.leader||'—'}</div></div>
+    <div class="stat-box"><div class="label">Auction Cap</div><div class="value">${fmt(cap)}</div></div>
+    <div class="stat-box"><div class="label">Eligible Owners</div><div class="value">${eligibleOwners(tier).length}</div></div>
+  </div>`;
+}
+
+function finalResultsHTML(){
+  const cards = OWNER_NAMES.map(name=>{
+    const o = state.owners[name];
+    let score = 0;
+    const slots = [1,2,3,4,5].map(t=>{
+      const pname = o.roster[t];
+      let pointStr = '';
+      if(pname){
+        const p = getPlayer(t,pname);
+        const pts = 7 - p.rank;
+        score += pts;
+        pointStr = `<span class="tag">#${p.rank} · ${pts}pt</span>`;
+      }
+      return `<div class="slot"><span>T${t}: ${pname||'—'}</span>${pointStr}</div>`;
+    }).join('');
+    return `<div class="final-card">
+      <h3>${name}</h3>
+      ${slots}
+      <div class="totals"><span>Spent: ${fmt(o.spent)}</span><span>Remaining: ${fmt(o.budget)}</span></div>
+      <div class="totals"><span>Roster Score</span><b>${score} / 30</b></div>
+    </div>`;
+  }).join('');
+  return `<div class="panel"><h2>Final Results</h2><div class="final-grid">${cards}</div></div>`;
+}
+
+function render(){
+  const app = document.getElementById('app');
+
+  if(state.stage === 'setup'){
+    app.innerHTML = `
+      <div class="setup-screen">
+        <h1>Manual Auction <span style="color:var(--red)">Operator</span></h1>
+        <p>6 owners, 100k credits each, 30 players across 5 tiers. Tier 1 auctions
+        solo first, then Tiers 2-5 auction together shuffled. The operator controls
+        every sale manually — nothing sells automatically.</p>
+        <button class="btn btn-primary" style="font-size:15px;padding:12px 26px;" onclick="startAuction()">Start Auction</button>
+      </div>`;
+    return;
+  }
+
+  const stagePill = state.stage === 'tier1' ? 'Stage 1 · Tier 1'
+    : state.stage === 'stage2' ? 'Stage 2 · Tiers 2-5'
+    : 'Complete';
+
+  let mainContent = '';
+  if(state.stage === 'done'){
+    mainContent = finalResultsHTML();
+  } else if(state.current) {
+    const showAssignBtn = state.current.tier === 1 && eligibleOwners(1).length === 1;
+    const tierEdge = {1:'#fbbf24',2:'#fb7185',3:'#a78bfa',4:'#38bdf8',5:'#34d399'}[state.current.tier];
+    mainContent = `
+      <div class="panel current" style="--edge:${tierEdge}">
+        <h2>Current Player</h2>
+        <div class="current-player">
+          <span class="tier-badge t${state.current.tier}">TIER ${state.current.tier}</span>
+          <span class="cp-name">${state.current.name}</span>
+        </div>
+        ${statGrid()}
+        ${showAssignBtn ? `<div class="assign-note">Only one eligible owner remains for Tier 1 — you may assign directly at floor price instead of running the bid.</div>` : ''}
+        <div class="controls-row">
+          <button class="btn btn-sell" ${state.leader?'':'disabled'} onclick="sellToLeader()">Sell to Leader</button>
+          <button class="btn btn-operator" onclick="markUnsold()">Mark Unsold</button>
+          ${showAssignBtn ? `<button class="btn btn-operator" onclick="assignToRemainingOwner()">Assign to Remaining Owner (Floor)</button>` : ''}
+        </div>
+        <div class="owner-cards">
+          ${OWNER_NAMES.map(ownerCardHTML).join('')}
+        </div>
+      </div>`;
+  }
+
+  app.innerHTML = `
+    <div class="title-row">
+      <h1>Manual Auction <span>Operator</span></h1>
+      <div class="stage-pill">${stagePill} · Pass ${state.passNum}</div>
+    </div>
+    <div class="controls-row">
+      <button class="btn btn-operator" ${history.length===0?'disabled':''} onclick="undoLast()">Undo Last Action</button>
+      <button class="btn btn-operator" onclick="freshReset()">Fresh Reset</button>
+    </div>
+    <div class="layout">
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        ${mainContent}
+        <div class="panel">
+          <h2>Team Board</h2>
+          ${teamBoardHTML()}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="panel">
+          <h2>Players Yet to Come</h2>
+          ${playersYetToComeHTML()}
+        </div>
+        <div class="panel">
+          <h2>Sold Players</h2>
+          ${soldListHTML()}
+        </div>
+        <div class="panel">
+          <h2>Auction Log</h2>
+          <div class="log-box">${logHTML()}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+state = freshState();
+render();
+</script>
+</body>
+</html>
