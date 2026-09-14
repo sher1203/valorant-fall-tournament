@@ -1,0 +1,11 @@
+{
+  "name": "valorant-fall-tournament",
+  "version": "1.0.0",
+  "description": "Manual auction operator for the Celestian Fall Tournament, with a zero-dependency Node backend and a JSON database.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "reset": "node -e \"require('fs').rmSync('db.json',{force:true});console.log('db.json removed - it will reseed on next start')\""
+  },
+  "private": true
+}

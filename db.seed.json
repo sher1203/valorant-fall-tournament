@@ -1,0 +1,339 @@
+{
+  "meta": {
+    "tournament": "Celestian Fall Tournament",
+    "startBudget": 100000,
+    "floor": {
+      "1": 20000,
+      "2": 10000,
+      "3": 7000,
+      "4": 5000,
+      "5": 2000
+    },
+    "increment": {
+      "1": 2000,
+      "2": 2000,
+      "3": 2000,
+      "4": 1000,
+      "5": 1000
+    },
+    "seededAt": null
+  },
+  "owners": {
+    "Vinnie": {
+      "name": "Vinnie",
+      "budget": 100000,
+      "spent": 0,
+      "roster": {
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null
+      }
+    },
+    "Sabid": {
+      "name": "Sabid",
+      "budget": 100000,
+      "spent": 0,
+      "roster": {
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null
+      }
+    },
+    "Kazi": {
+      "name": "Kazi",
+      "budget": 100000,
+      "spent": 0,
+      "roster": {
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null
+      }
+    },
+    "Zihan": {
+      "name": "Zihan",
+      "budget": 100000,
+      "spent": 0,
+      "roster": {
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null
+      }
+    },
+    "Prapya": {
+      "name": "Prapya",
+      "budget": 100000,
+      "spent": 0,
+      "roster": {
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null
+      }
+    },
+    "Zany": {
+      "name": "Zany",
+      "budget": 100000,
+      "spent": 0,
+      "roster": {
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null
+      }
+    }
+  },
+  "players": [
+    {
+      "name": "Rih#117",
+      "tier": 1,
+      "rank": 1,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "PSYCO#1751",
+      "tier": 1,
+      "rank": 2,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Uniccccccccccccc #666",
+      "tier": 1,
+      "rank": 3,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Clash Killer #Zyl",
+      "tier": 1,
+      "rank": 4,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Wagyu #tasty",
+      "tier": 1,
+      "rank": 5,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "NotRhythmQ",
+      "tier": 1,
+      "rank": 6,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Redeyeee#RedZ",
+      "tier": 2,
+      "rank": 1,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "RUSHAFI#senti",
+      "tier": 2,
+      "rank": 2,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "carrozzeria#2006",
+      "tier": 2,
+      "rank": 3,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "wallows#meow",
+      "tier": 2,
+      "rank": 4,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Tawf#IQUR",
+      "tier": 2,
+      "rank": 5,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Shiraj #dhoka",
+      "tier": 2,
+      "rank": 6,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "TheBrownieGuy#1419",
+      "tier": 3,
+      "rank": 1,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Sameer#Bara",
+      "tier": 3,
+      "rank": 2,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "DocTor PH0EN1X #R1SEN",
+      "tier": 3,
+      "rank": 3,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "DowryNegotiator #easy",
+      "tier": 3,
+      "rank": 4,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "S4B1D#6969",
+      "tier": 3,
+      "rank": 5,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "linear#NotIt",
+      "tier": 3,
+      "rank": 6,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "NotDabu",
+      "tier": 4,
+      "rank": 1,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Hype#yyz",
+      "tier": 4,
+      "rank": 2,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Howl#dubs",
+      "tier": 4,
+      "rank": 3,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "nahianishot#5049",
+      "tier": 4,
+      "rank": 4,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "rakaluvr #NH3",
+      "tier": 4,
+      "rank": 5,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Veneno#ERN",
+      "tier": 4,
+      "rank": 6,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Armin#33333",
+      "tier": 5,
+      "rank": 1,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "MrSkylight#ezpz",
+      "tier": 5,
+      "rank": 2,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "NoBrainNoAim",
+      "tier": 5,
+      "rank": 3,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Enternet#1234",
+      "tier": 5,
+      "rank": 4,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Valcrow #1674",
+      "tier": 5,
+      "rank": 5,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    },
+    {
+      "name": "Mercenary0x#500r",
+      "tier": 5,
+      "rank": 6,
+      "sold": false,
+      "soldTo": null,
+      "price": null
+    }
+  ],
+  "events": [],
+  "sales": []
+}
