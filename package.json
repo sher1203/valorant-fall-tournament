@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "reset": "node -e \"require('fs').rmSync('db.json',{force:true});console.log('db.json removed - it will reseed on next start')\""
+    "clear-db": "node clear-db.js"
   },
   "private": true
 }

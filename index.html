@@ -162,6 +162,12 @@
     justify-content:space-between;font-weight:600;}
   .final-card .totals b{color:var(--text);}
   .empty-msg{color:var(--sub-dim);font-size:12.5px;font-style:italic;padding:6px 0;}
+  .db-warning{background:rgba(248,113,113,0.12);border:1px solid var(--danger);
+    color:#fecaca;padding:13px 15px;border-radius:var(--radius-sm);font-size:13px;
+    margin-bottom:18px;line-height:1.6;}
+  .db-warning b{color:#fff;}
+  .db-warning code{font-family:var(--mono);background:rgba(0,0,0,.35);padding:2px 7px;
+    border-radius:4px;color:#fecaca;font-size:12.5px;}
   .assign-note{background:var(--sell-soft);border:1px solid var(--sell);color:#6ee7b7;
     padding:10px 12px;border-radius:var(--radius-sm);font-size:12.5px;margin-bottom:14px;
     font-weight:600;}
@@ -194,6 +200,32 @@ const SHOW_BUDGETS = false;
 // off disk as file:// the app still works exactly as before, fully offline.
 const API = (typeof location !== 'undefined' && /^https?:/.test(location.protocol))
   ? location.origin + '/api' : null;
+
+// The database persists between sessions, so an auction started on top of
+// existing data is NOT a clean slate. Ask the backend and warn loudly if so.
+let dbStatus = null;
+
+function checkDbStatus(){
+  if(!API || typeof fetch !== 'function') return;
+  fetch(API + '/status')
+    .then(r => r.json())
+    .then(s => { dbStatus = s; render(); })
+    .catch(() => {});
+}
+
+function dbWarningHTML(){
+  if(!dbStatus || dbStatus.fresh) return '';
+  return `<div class="db-warning">
+    <b>Heads up - the backend database already has data in it.</b><br>
+    ${dbStatus.sales} of ${dbStatus.players} players are already sold and
+    ${dbStatus.events} events are logged, with ${fmt(dbStatus.committed)} committed
+    across the league. Anything you run now continues on top of that, so
+    <b>this will not be a fresh auction</b> and the backend will reject re-selling
+    a player an owner already holds.<br>
+    To start clean, stop and run <code>node clear-db.js</code> in your terminal,
+    then refresh this page.
+  </div>`;
+}
 
 function report(type, payload){
   if(!API || typeof fetch !== 'function') return;
@@ -335,6 +367,18 @@ function isValidJumpAmount(tier, amount){
 }
 
 function startAuction(){
+  // Refuse to start silently on top of a previous session's data.
+  if(dbStatus && !dbStatus.fresh){
+    const msg = 'The backend database is NOT empty.\n\n'
+      + '  - ' + dbStatus.sales + ' of ' + dbStatus.players + ' players already sold\n'
+      + '  - ' + dbStatus.events + ' events already logged\n'
+      + '  - ' + fmt(dbStatus.committed) + ' already committed\n\n'
+      + 'Starting now continues on top of that data.\n'
+      + 'It will NOT be a fresh auction.\n\n'
+      + 'To start clean: cancel, run "node clear-db.js" in your terminal, then refresh.\n\n'
+      + 'Continue anyway?';
+    if(!confirm(msg)) return;
+  }
   snapshot();
   state.stage = 'tier1';
   pushLog('Auction started. Tier 1 order randomized.','sys');
@@ -491,10 +535,14 @@ function assignToRemainingOwner(){
 }
 
 function freshReset(){
-  if(!confirm('Reset the entire auction? All progress will be lost.')) return;
+  const msg = 'Restart the on-screen auction? All progress in this browser will be lost.\n\n'
+    + 'The backend database is NOT cleared - past sales stay recorded there.\n'
+    + 'To wipe it, run "node clear-db.js" in your terminal.';
+  if(!confirm(msg)) return;
   snapshot();
   state = freshState();
   report('reset');
+  checkDbStatus();
   render();
 }
 
@@ -663,6 +711,7 @@ function render(){
 
   if(state.stage === 'setup'){
     app.innerHTML = `
+      ${dbWarningHTML()}
       <div class="setup-screen">
         <h1>Manual Auction <span style="color:var(--red)">Operator</span></h1>
         <p>6 owners, 100k credits each, 30 players across 5 tiers. Tier 1 auctions
@@ -704,6 +753,7 @@ function render(){
   }
 
   app.innerHTML = `
+    ${dbWarningHTML()}
     <div class="title-row">
       <h1>Manual Auction <span>Operator</span></h1>
       <div class="stage-pill">${stagePill} · Pass ${state.passNum}</div>
@@ -740,6 +790,7 @@ function render(){
 
 state = freshState();
 render();
+checkDbStatus();
 </script>
 </body>
 </html>
