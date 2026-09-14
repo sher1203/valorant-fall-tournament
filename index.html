@@ -179,6 +179,10 @@ const TIER_PLAYERS = {
 const FLOOR = {1:20000,2:10000,3:7000,4:5000,5:2000};
 const INCR  = {1:2000, 2:2000, 3:2000, 4:1000,5:1000};
 const START_BUDGET = 100000;
+// Front-end only: when false, every owner-budget figure (budget, live max,
+// auction cap, team-board column) is withheld from the live auction UI.
+// Bidding logic and budget enforcement are unchanged. Flip to true to restore.
+const SHOW_BUDGETS = false;
 
 function fmt(n){
   if(n<0) n=0;
@@ -468,6 +472,7 @@ function ownerCardHTML(ownerName){
       <div class="oc-name">${ownerName}</div>
       ${tag}
     </div>
+    ${SHOW_BUDGETS ? `
     <div class="oc-stats">
       <div class="oc-stat">
         <div class="label">Budget</div>
@@ -477,7 +482,7 @@ function ownerCardHTML(ownerName){
         <div class="label">Live Max</div>
         <div class="val">${elig ? fmt(Math.max(max,0)) : '—'}</div>
       </div>
-    </div>
+    </div>` : ''}
     <div class="oc-actions">
       <button class="btn btn-primary" ${canStandardBid?'':'disabled'}
         onclick="placeStandardBid('${ownerName}')">Bid ${fmt(nextBid)}</button>
@@ -540,10 +545,10 @@ function teamBoardHTML(){
   const rows = OWNER_NAMES.map(name=>{
     const o = state.owners[name];
     const cells = [1,2,3,4,5].map(t=>o.roster[t] ? o.roster[t] : '—').join('</td><td>');
-    return `<tr><td><b>${name}</b></td><td>${fmt(o.budget)}</td><td>${cells}</td></tr>`;
+    return `<tr><td><b>${name}</b></td>${SHOW_BUDGETS?`<td>${fmt(o.budget)}</td>`:''}<td>${cells}</td></tr>`;
   }).join('');
   return `<table>
-    <thead><tr><th>Owner</th><th>Budget</th><th>T1</th><th>T2</th><th>T3</th><th>T4</th><th>T5</th></tr></thead>
+    <thead><tr><th>Owner</th>${SHOW_BUDGETS?'<th>Budget</th>':''}<th>T1</th><th>T2</th><th>T3</th><th>T4</th><th>T5</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
@@ -564,7 +569,7 @@ function statGrid(){
     <div class="stat-box"><div class="label">Min Increase</div><div class="value">${fmt(INCR[tier])}</div></div>
     <div class="stat-box"><div class="label">Current Bid</div><div class="value">${state.currentBid?fmt(state.currentBid):'—'}</div></div>
     <div class="stat-box"><div class="label">Current Leader</div><div class="value">${state.leader||'—'}</div></div>
-    <div class="stat-box"><div class="label">Auction Cap</div><div class="value">${fmt(cap)}</div></div>
+    ${SHOW_BUDGETS ? `<div class="stat-box"><div class="label">Auction Cap</div><div class="value">${fmt(cap)}</div></div>` : ''}
     <div class="stat-box"><div class="label">Eligible Owners</div><div class="value">${eligibleOwners(tier).length}</div></div>
   </div>`;
 }
